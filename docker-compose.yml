@@ -1,4 +1,54 @@
 version: '3'
 
-# service description
+# service desciption
 services:
+
+  # gitlab server
+  gitlab-server:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab-server
+    hostname: gitlab-server
+    restart: unless-stopped
+    networks:
+      - gitlab-net
+      - traefik-net
+    volumes:
+      - ./config:/etc/gitlab
+      - ./data/logs:/var/log/gitlab
+      - ./data/data:/var/opt/gitlab
+      - ./data/secrets-backup:/secret/gitlab/backups
+    labels:
+      # enable traefik
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+      # gitlab https endpoint
+      - "traefik.http.routers.gitlab-web-secure.entrypoints=websecure"
+      - "traefik.http.routers.gitlab-web-secure.rule=HostHeader(`${GITLAB_CONT_URL}`)"
+      - "traefik.http.routers.gitlab-web-secure.tls=true"
+      - "traefik.http.routers.sonarqube-web-secure.tls.certresolver=lets-encrypt"
+      - "traefik.http.routers.gitlab-web-secure.service=gitlab-service"
+      # gitlab-pages https endpoint
+      - "traefik.http.routers.gitlab-pages-web-secure.entrypoints=websecure"
+      - "traefik.http.routers.gitlab-pages-web-secure.rule=HostRegexp(`${GITLAB_PAGES_CONT_URL}`)"
+      - "traefik.http.routers.gitlab-pages-web-secure.tls=true"
+      - "traefik.http.routers.sonarqube-web-secure.tls.certresolver=lets-encrypt"
+      - "traefik.http.routers.gitlab-pages-web-secure.service=gitlab-pages-service"
+      # ssh endpoint
+      - "traefik.tcp.routers.gitlab-server-ssh.entrypoints=gitlabssh"
+      - "traefik.tcp.routers.gitlab-server-ssh.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.gitlab-server-ssh.service=gitlab-ssh-service"
+      # services
+      - "traefik.http.services.gitlab-service.loadbalancer.server.port=80"
+      - "traefik.http.services.gitlab-pages-service.loadbalancer.server.port=8090"
+      - "traefik.tcp.services.gitlab-ssh-service.loadbalancer.server.port=22"
+
+# networks to use
+networks:
+
+  # traefik reverse proxy network
+  traefik-net:
+    external: true
+
+  # gitlab server net
+  gitlab-net:
+    driver: bridge
